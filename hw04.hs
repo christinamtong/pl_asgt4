@@ -5,6 +5,10 @@
 
 module Hw04 where
 
+-- Charlie Watson, Christina Tong
+-- Hw 4
+-- Prof Greenberg
+
 import Control.Applicative
 import Data.Char
 
@@ -23,25 +27,23 @@ data AExp =
    | Times AExp AExp
    | Neg AExp
    | Div AExp AExp
- deriving (Show, Eq)
-
--- TODO FIX SPACING
+ deriving Eq
 
 data BExp =
    Bool Bool
- | Equal AExp AExp
- | Lt AExp AExp
- | Not BExp
- | Or BExp BExp
- | And BExp BExp
+   | Equal AExp AExp
+   | Lt AExp AExp
+   | Not BExp
+   | Or BExp BExp
+   | And BExp BExp
  deriving (Show, Eq)
 
 data Stmt =
    Skip
- | Assign VarName AExp
- | Seq Stmt Stmt
- | If BExp Stmt Stmt
- | While BExp Stmt
+   | Assign VarName AExp
+   | Seq Stmt Stmt
+   | If BExp Stmt Stmt
+   | While BExp Stmt
  deriving (Show, Eq)
 
 
@@ -60,29 +62,28 @@ data Stmt =
 -- parameter and use it to determine what "level" you're at, or actually
 -- write several functions (`showTerm`, `showFactor`, etc.).
 
+instance Show AExp where
+    show (Var a) = a
+    show (Num a) = show a
+    show (Plus a b) = showTerm (Plus a b)
+    show (Div a b) = showFactor (Div a b)
+    show (Times a b) = showFactor (Times a b)
+    show (Neg a) = showNeg (Neg a)
 
--- -- > instance Show AExp where
--- -- >    show (Var a) = a
--- -- >    show (Num a) = show a
--- -- >    show (Plus a b) = showTerm (Plus a b)
--- -- >    show (Div a b) = showFactor (Div a b)
--- -- >    show (Times a b) = showFactor (Times a b)
--- -- >    show (Neg a) = showNeg (Neg a)
--- -- >
--- -- > showTerm (Plus a (Neg b)) = showFactor a ++ " - " ++ showTerm b
--- -- > showTerm (Plus a b) = showFactor a ++ " + " ++ showTerm b
--- -- > showTerm x = showFactor x
--- -- >
--- -- > showFactor (Times a b) = showNeg a ++ " * " ++ showFactor b
--- -- > showFactor (Div a b) = showNeg a ++ " / " ++ showFactor b
--- -- > showFactor a = showNeg a
--- -- >
--- -- > showNeg (Neg a) = "-" ++ showAtom a
--- -- > showNeg a = showAtom a
--- -- >
--- -- > showAtom (Num a) = show a
--- -- > showAtom (Var a) = a
--- -- > showAtom a = "(" ++ showTerm a ++ ")"
+showTerm (Plus a (Neg b)) = showFactor a ++ " - " ++ showTerm b
+showTerm (Plus a b) = showFactor a ++ " + " ++ showTerm b
+showTerm x = showFactor x
+
+showFactor (Times a b) = showNeg a ++ " * " ++ showFactor b
+showFactor (Div a b) = showNeg a ++ " / " ++ showFactor b
+showFactor a = showNeg a
+
+showNeg (Neg a) = "-" ++ showAtom a
+showNeg a = showAtom a
+
+showAtom (Num a) = show a
+showAtom (Var a) = a
+showAtom a = "(" ++ showTerm a ++ ")"
 
 -- <h3>Problem 2: Parsing expressions</h3>
 
@@ -262,6 +263,7 @@ times = char '*'
 -- is `&&`, or is `||`, and not is `!`. The constants can just use
 -- lower-case names, like `true` and `false`.
 
+
 bexp_encoding_test1 = "x == y" -- Equal (Var x) (Var y)
 bexp_encoding_test2 = "x <= y" -- Or (Equal (Var x) (Var y)) (Lt (Var x) (Var y))
 bexp_encoding_test3 = "x != y" -- Not (Equal (Var x)) (Var y)
@@ -270,23 +272,29 @@ bexp, factorB, notB, atomB :: Parser BExp
 bexp = Or <$> factorB <* or' <*> bexp <|> factorB
 factorB = And <$> notB <* and' <*> factorB <|> notB
 notB = Not <$> (bang' *> atomB) <|> atomB
-atomB = AExp <$> aexp <|> (char '(' *> bexp <* char ')')
-      <|> Equal <$> factorB <* equal' <*> bexp
-      <|> Not <$> Equal <$> factorB <* nequal' <*> bexp
-      <|> Lt <$> factorB <* lt' <*> bexp
-	    <|> Or <$> (Equal <$> factorB <* leq' <*> bexp) <$> (Lt <$> factorB <* lt' <*> bexp)
-      <|> Not <$> Lt <$> factorB <* geq' <*> bexp
+atomB = Bool <$> bool' <|> (char '(' *> bexp <* char ')')
+      <|> Equal <$> aexp <* equal' <*> aexp
+      <|> Not <$> (Equal <$> aexp <* nequal' <*> aexp)
+      <|> Lt <$> aexp <* lt' <*> aexp
+	    <|> (\x y -> (And (Not (Equal x y)) (Not (Lt x y)))) <$> aexp <* gt' <*> aexp
+      <|> Not <$> (Lt <$> aexp <* geq' <*> aexp)
+      <|> (\x y -> (Or (Equal x y) (Lt x y))) <$> aexp <* leq' <*> aexp
 
-or', and', bang', equal', nequal', lt', gt', leq', geq' :: Parser Char
+or', and', bang', equal', nequal', lt', gt', leq', geq' :: Parser String
 or' = str "||"
 and' = str "&&"
-bang' = char "!"
+bang' = str "!"
 equal' = str "=="
 nequal' = str "!="
-lt' = char "<"
-gt' = char ">"
+lt' = str "<"
+gt' = str ">"
 leq' = str "<="
 geq' = str ">="
+
+bool' :: Parser Bool
+bool' = boolMap <$> (ws *> (str "true" <|> str "false"))
+    where boolMap "true" = True
+          boolMap _ = False
 
 -- <h3>Problem 3: Parsing a la C</h3>
 
@@ -300,7 +308,7 @@ geq' = str ">="
 
 -- Here are some example programs in the C syntax:
 
-cProg1 = "x = 5; y = 6;"
+cProg1 = "x = 5  y = 6;"
 cProg2 = "if (x == 0) { y = 10; } else { y = x; }"
 cProg3 = "while (iffy > 10) { iffy = iffy - 1; };\n\nderp = 7;"
 cProg4 = "while (true) {};"
@@ -310,8 +318,31 @@ cProg4 = "while (true) {};"
 -- explicitly encourage collaboration on understanding the syntax (though
 -- please write your own parsers within your pair).
 
-cSyntax :: Parser Stmt
-cSyntax = undefined
+-- data Stmt =
+--    Skip
+--  | Assign VarName AExp
+--  | Seq Stmt Stmt
+--  | If BExp Stmt Stmt
+--  | While BExp Stmt
+--  deriving (Show, Eq)
+
+-- cSyntax :: Parser Stmt
+-- cSyntax = Assign <$> var <* singleEqual' <*> aexp
+--     <|> Seq <$> cSyntax <* semicolon' <*> cSyntax
+--     <|> If <$> iff' *> lparen *> bexp <*> rparen *> lbrac *> 
+--         (pure Skip <|> cSyntax) <* rbrac *> else' *> lbrac *> (pure Skip <|> cSyntax) <* rbrac
+--     -- <|> While <$> while' *> lparen *> bexp <* rparen <*> lbrac *> (pure Skip <|> cSyntax) <* rbrac
+
+-- semicolon', singleEqual', while', iff', else', lparen, rparen, lbrac, rbrac :: Parser String
+-- lparen = str "("
+-- rparen = str ")"
+-- lbrac = str "{"
+-- rbrac = str "}"
+-- semicolon' = str ";"
+-- singleEqual' = str "="
+-- while' = str "while"
+-- iff' = str "if"
+-- else' = str "else"
 
 
 -- Note: you will *not* be penalized for extra `Skip`s in your parsed

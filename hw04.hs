@@ -245,7 +245,7 @@ neg = Neg <$> (minus *> atom) <|> atom
 atom = Num <$> num <|> (char '(' *> aexp <* char ')') <|> Var <$> var
 
 plus, divide, minus, times :: Parser Char
-plus = char '+' 
+plus = char '+'
 divide = char '/'
 minus = char '-'
 times = char '*'
@@ -321,24 +321,22 @@ cProg4 = "while (true) {};"
 -- what happens when you call two if's in a row? need a parser that is a sequence
 
 cSyntax :: Parser Stmt
-cSyntax = undefined
+cSyntax = Assign <$> var <* singleEqual' <*> aexp
+    <|> Seq <$> cSyntax <* semicolon' <*> cSyntax
+    <|> If <$> (iff' *> lparen *> bexp <* rparen) <*> (lbrac *>
+        (pure Skip <|> cSyntax) <* rbrac) <*> (else' *> lbrac *> (pure Skip <|> cSyntax) <* rbrac)
+    <|> While <$> (while' *> lparen *> bexp <* rparen) <*> (lbrac *> (pure Skip <|> cSyntax) <* rbrac)
 
---   Assign <$> var <* singleEqual' <*> aexp
---     <|> Seq <$> cSyntax <* semicolon' <*> cSyntax
---     <|> If <$> iff' *> lparen *> bexp <*> rparen *> lbrac *> 
---         (pure Skip <|> cSyntax) <* rbrac *> else' *> lbrac *> (pure Skip <|> cSyntax) <* rbrac
---     -- <|> While <$> while' *> lparen *> bexp <* rparen <*> lbrac *> (pure Skip <|> cSyntax) <* rbrac
-
--- semicolon', singleEqual', while', iff', else', lparen, rparen, lbrac, rbrac :: Parser String
--- lparen = str "("
--- rparen = str ")"
--- lbrac = str "{"
--- rbrac = str "}"
--- semicolon' = str ";"
--- singleEqual' = str "="
--- while' = str "while"
--- iff' = str "if"
--- else' = str "else"
+semicolon', singleEqual', while', iff', else', lparen, rparen, lbrac, rbrac :: Parser String
+lparen = str "("
+rparen = str ")"
+lbrac = str "{"
+rbrac = str "}"
+semicolon' = str ";"
+singleEqual' = str "="
+while' = str "while"
+iff' = str "if"
+else' = str "else"
 
 
 -- Note: you will *not* be penalized for extra `Skip`s in your parsed

@@ -70,17 +70,21 @@ instance Show AExp where
     show (Times a b) = showFactor (Times a b)
     show (Neg a) = showNeg (Neg a)
 
+showTerm :: AExp -> [Char]
 showTerm (Plus a (Neg b)) = showFactor a ++ " - " ++ showTerm b
 showTerm (Plus a b) = showFactor a ++ " + " ++ showTerm b
 showTerm x = showFactor x
 
+showFactor :: AExp -> [Char]
 showFactor (Times a b) = showNeg a ++ " * " ++ showFactor b
 showFactor (Div a b) = showNeg a ++ " / " ++ showFactor b
 showFactor a = showNeg a
 
+showNeg :: AExp -> [Char]
 showNeg (Neg a) = "-" ++ showAtom a
 showNeg a = showAtom a
 
+showAtom :: AExp -> [Char]
 showAtom (Num a) = show a
 showAtom (Var a) = a
 showAtom a = "(" ++ showTerm a ++ ")"
@@ -129,7 +133,7 @@ instance Applicative Parser where
 -- left-hand side, and if that fails, try the right.
 
 instance Alternative Parser where
-   empty = Parser $ \s -> Nothing
+   empty = Parser $ \_ -> Nothing
    l <|> r = Parser $ \s -> parse l s <|> parse r s
 
 -- Below we'll define a few "primitive" parsers, which explicitly write
@@ -276,7 +280,7 @@ atomB = Bool <$> bool' <|> (char '(' *> bexp <* char ')')
       <|> Equal <$> aexp <* equal' <*> aexp
       <|> Not <$> (Equal <$> aexp <* nequal' <*> aexp)
       <|> Lt <$> aexp <* lt' <*> aexp
-	    <|> (\x y -> (And (Not (Equal x y)) (Not (Lt x y)))) <$> aexp <* gt' <*> aexp
+      <|> (\x y -> (And (Not (Equal x y)) (Not (Lt x y)))) <$> aexp <* gt' <*> aexp
       <|> Not <$> (Lt <$> aexp <* geq' <*> aexp)
       <|> (\x y -> (Or (Equal x y) (Lt x y))) <$> aexp <* leq' <*> aexp
 
@@ -319,11 +323,11 @@ cProg5 = "if (x==0) { y = 10;} else { }\ny = x + y;\n;x = 5;"
 -- explicitly encourage collaboration on understanding the syntax (though
 -- please write your own parsers within your pair).
 
--- what happens when you call two if's in a row? need a parser that is a sequence
-
 cSyntax :: Parser Stmt
-cSyntax = Seq <$> cSyntax <* semicolon' <*> cSyntax
-    <|> If <$> (iff' *> lparen *> bexp <* rparen) <*> (lbrac *>
+cSyntax = Seq <$> cHelper <* semicolon' <*> cSyntax
+
+cHelper :: Parser Stmt
+cHelper = If <$> (iff' *> lparen *> bexp <* rparen) <*> (lbrac *>
         (pure Skip <|> cSyntax) <* rbrac) <*> (else' *> lbrac *> (pure Skip <|> cSyntax) <* rbrac)
     <|> While <$> (while' *> lparen *> bexp <* rparen) <*> (lbrac *> (pure Skip <|> cSyntax) <* rbrac)
     <|> Assign <$> (var <* singleEqual') <*> (aexp <* semicolon')
@@ -392,13 +396,15 @@ pyProg5 = unlines ["while x > 0:",
 -- `pythonSyntax`:
 
 pythonSyntax :: Parser Stmt
-pythonSyntax = pythonParser 0
+pythonSyntax = pythonParserSeq 0
+
+pythonParserSeq :: Integer -> Parser Stmt
+pythonParserSeq lvl = Seq <$> ((pythonParser lvl) <* newline') <*> (pythonParserSeq lvl)
 
 pythonParser :: Integer -> Parser Stmt
-pythonParser lvl = Seq <$> ((pythonParser lvl) <* newline') <*> (pythonParser lvl)
-    <|> If <$> (bexp <* colon' <* newline') <*> (pure Skip <|> pythonParser (lvl+1)) 
-        <*> (else' *> colon' *> newline' *> (pythonParser (lvl+1)))
-    <|> While <$> (bexp <* colon' <* newline') <*> (pure Skip <|> pythonParser (lvl+1))
+pythonParser lvl = If <$> (bexp <* colon' <* newline') <*> (pure Skip <|> pythonParserSeq (lvl+1)) 
+        <*> (else' *> colon' *> newline' *> (pythonParserSeq (lvl+1)))
+    <|> While <$> (bexp <* colon' <* newline') <*> (pure Skip <|> pythonParserSeq (lvl+1))
     <|> Assign <$> ((ensureWS' lvl) *> var <* singleEqual') <*> (aexp <* newline')
 
 -- data Stmt =

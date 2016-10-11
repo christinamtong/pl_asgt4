@@ -419,14 +419,12 @@ newline' = str "\n"
 -- check that exactly correct amount of whitespace comes before the first character,
 -- using helper function to accumulate requisite whitespace
 ensureWS' :: Integer -> Parser String
-ensureWS' level = loop (theWS level) <* (ensure isAlphaNumWrap lookahead)
-    where theWS 0 = ""
-          theWS l = "  " ++ theWS (l-1)  
+ensureWS' level = ensure (\s -> s == (xWS level)) (many (satisfy isSpace)) <* (ensure isAlphaNumWrap lookahead)
+    where xWS 0 = ""
+          xWS l = "  " ++ xWS (l-1) 
           isAlphaNumWrap Nothing = False
           isAlphaNumWrap (Just c) = isAlphaNum c
-          loop s
-          loop [] = pure []
-          loop (c:cs) = (:) <$> satisfy (==c) <*> loop cs
+
 
 -- when recurse, increment level by 2
 -- before every statement make sure there is levels*2 space

@@ -105,7 +105,7 @@ newtype Parser a = Parser { parse :: String -> Maybe (a,String) }
 -- But first, `Parser` is a functor: `fmap` applies to the parsed value.
 
 instance Functor Parser where
- fmap f p = Parser $ \s -> (\(a,c) -> (f a, c)) <$> parse p s
+    fmap f p = Parser $ \s -> (\(a,c) -> (f a, c)) <$> parse p s
 
 -- `Parser` is also applicative: a pure `Parser` always succeeds, just
 -- returning its input. The `(<*>)` (read: "ap") function takes an `f ::
@@ -116,11 +116,11 @@ instance Functor Parser where
 -- say "apply `g` to the result of parsing with `a`.)
 
 instance Applicative Parser where
- pure a = Parser $ \s -> Just (a,s)
- f <*> a = Parser $ \s ->
-   case parse f s of
-     Just (g,s') -> parse (fmap g a) s'
-     Nothing -> Nothing
+    pure a = Parser $ \s -> Just (a,s)
+    f <*> a = Parser $ \s ->
+        case parse f s of
+             Just (g,s') -> parse (fmap g a) s'
+            Nothing -> Nothing
 
 -- There's one last type class to define: `Alternative`, which is a
 -- left-biased choice. In the `empty` case, we just return
@@ -129,8 +129,8 @@ instance Applicative Parser where
 -- left-hand side, and if that fails, try the right.
 
 instance Alternative Parser where
- empty = Parser $ \s -> Nothing
- l <|> r = Parser $ \s -> parse l s <|> parse r s
+   empty = Parser $ \s -> Nothing
+   l <|> r = Parser $ \s -> parse l s <|> parse r s
 
 -- Below we'll define a few "primitive" parsers, which explicitly write
 -- parsing functions. Don't define any extra ones! All of your solutions
@@ -140,19 +140,19 @@ instance Alternative Parser where
 
 ensure :: (a -> Bool) -> Parser a -> Parser a
 ensure p parser = Parser $ \s ->
-  case parse parser s of
-    Nothing -> Nothing
-    Just (a,s') -> if p a then Just (a,s') else Nothing
+    case parse parser s of
+         Nothing -> Nothing
+         Just (a,s') -> if p a then Just (a,s') else Nothing
 
 lookahead :: Parser (Maybe Char)
 lookahead = Parser f
- where f [] = Just (Nothing,[])
-       f (c:s) = Just (Just c,c:s)
+    where f [] = Just (Nothing,[])
+          f (c:s) = Just (Just c,c:s)
 
 satisfy :: (Char -> Bool) -> Parser Char
 satisfy p = Parser f
- where f [] = Nothing
-       f (x:xs) = if p x then Just (x,xs) else Nothing
+    where f [] = Nothing
+          f (x:xs) = if p x then Just (x,xs) else Nothing
 
 -- We can detect the end of the file manually...
 
@@ -318,16 +318,12 @@ cProg4 = "while (true) {};"
 -- explicitly encourage collaboration on understanding the syntax (though
 -- please write your own parsers within your pair).
 
--- data Stmt =
---    Skip
---  | Assign VarName AExp
---  | Seq Stmt Stmt
---  | If BExp Stmt Stmt
---  | While BExp Stmt
---  deriving (Show, Eq)
+-- what happens when you call two if's in a row? need a parser that is a sequence
 
--- cSyntax :: Parser Stmt
--- cSyntax = Assign <$> var <* singleEqual' <*> aexp
+cSyntax :: Parser Stmt
+cSyntax = undefined
+
+--   Assign <$> var <* singleEqual' <*> aexp
 --     <|> Seq <$> cSyntax <* semicolon' <*> cSyntax
 --     <|> If <$> iff' *> lparen *> bexp <*> rparen *> lbrac *> 
 --         (pure Skip <|> cSyntax) <* rbrac *> else' *> lbrac *> (pure Skip <|> cSyntax) <* rbrac
@@ -397,7 +393,42 @@ pyProg5 = unlines ["while x > 0:",
 -- `pythonSyntax`:
 
 pythonSyntax :: Parser Stmt
-pythonSyntax = undefined
+pythonSyntax = Assign <$> ensureWS *> var <* singleEqual' <*> aexp
+    <|> Seq <$> pythonSyntax <* newline' <*> pythonSyntax
+    <|> If <$> bexp colon' newline' (Skip <|> pythonSyntax) else' colon' newline' 
+
+-- data Stmt =
+--    Skip
+--  | Assign VarName AExp
+--  | Seq Stmt Stmt
+--  | If BExp Stmt Stmt
+--  | While BExp Stmt
+--  deriving (Show, Eq)
+
+--   Assign <$> var <* singleEqual' <*> aexp
+--     <|> Seq <$> cSyntax <* semicolon' <*> cSyntax
+--     <|> If <$> iff' *> lparen *> bexp <*> rparen *> lbrac *> 
+--         (pure Skip <|> cSyntax) <* rbrac *> else' *> lbrac *> (pure Skip <|> cSyntax) <* rbrac
+--     -- <|> While <$> while' *> lparen *> bexp <* rparen <*> lbrac *> (pure Skip <|> cSyntax) <* rbrac
+
+
+-- parse newlines, while, else, if, single equals, :
+colon' :: Parser Char
+colon' = char ':'
+
+-- check that exactly correct amount of whitespace comes before the first character,
+-- using helper function to accumulate requisite whitespace
+ensureWS :: Integer -> Parser String
+ensureWS level = str (theWS level) <* ensure lookahead isAlphaNum 
+    where theWS 0 = ""
+          theWS l = "  " + theWS (l-1)  
+
+-- when recurse, increment level by 2
+-- before every statement make sure there is levels*2 space
+-- catch 
+-- skip is empty space?
+
+
 
 -- You can largely follow the same idea as your C-style parser, but your
 -- parsers for individual statements will need to keep track of the

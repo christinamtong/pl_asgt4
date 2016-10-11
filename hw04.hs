@@ -120,7 +120,7 @@ instance Applicative Parser where
     f <*> a = Parser $ \s ->
         case parse f s of
              Just (g,s') -> parse (fmap g a) s'
-            Nothing -> Nothing
+             Nothing -> Nothing
 
 -- There's one last type class to define: `Alternative`, which is a
 -- left-biased choice. In the `empty` case, we just return
@@ -308,10 +308,11 @@ bool' = boolMap <$> (ws *> (str "true" <|> str "false"))
 
 -- Here are some example programs in the C syntax:
 
-cProg1 = "x = 5  y = 6;"
+cProg1 = "x = 5; y = 6;"
 cProg2 = "if (x == 0) { y = 10; } else { y = x; }"
 cProg3 = "while (iffy > 10) { iffy = iffy - 1; };\n\nderp = 7;"
 cProg4 = "while (true) {};"
+cProg5 = "if (x==0) { y = 10;} else { }\ny = x + y;\n;x = 5;"
 
 -- You'll *definitely* want to write more test programs. If you come up
 -- with interesting corner cases, post them to Piazza! I want to
@@ -321,11 +322,11 @@ cProg4 = "while (true) {};"
 -- what happens when you call two if's in a row? need a parser that is a sequence
 
 cSyntax :: Parser Stmt
-cSyntax = Assign <$> var <* singleEqual' <*> aexp
-    <|> Seq <$> cSyntax <* semicolon' <*> cSyntax
+cSyntax = Seq <$> cSyntax <* semicolon' <*> cSyntax
     <|> If <$> (iff' *> lparen *> bexp <* rparen) <*> (lbrac *>
         (pure Skip <|> cSyntax) <* rbrac) <*> (else' *> lbrac *> (pure Skip <|> cSyntax) <* rbrac)
     <|> While <$> (while' *> lparen *> bexp <* rparen) <*> (lbrac *> (pure Skip <|> cSyntax) <* rbrac)
+    <|> Assign <$> (var <* singleEqual') <*> (aexp <* semicolon')
 
 semicolon', singleEqual', while', iff', else', lparen, rparen, lbrac, rbrac :: Parser String
 lparen = str "("
@@ -391,9 +392,14 @@ pyProg5 = unlines ["while x > 0:",
 -- `pythonSyntax`:
 
 pythonSyntax :: Parser Stmt
-pythonSyntax = Assign <$> ensureWS *> var <* singleEqual' <*> aexp
-    <|> Seq <$> pythonSyntax <* newline' <*> pythonSyntax
-    <|> If <$> bexp colon' newline' (Skip <|> pythonSyntax) else' colon' newline' 
+pythonSyntax = pythonParser 0
+
+pythonParser :: Integer -> Parser Stmt
+pythonParser lvl = Seq <$> ((pythonParser lvl) <* newline') <*> (pythonParser lvl)
+    <|> If <$> (bexp <* colon' <* newline') <*> (pure Skip <|> pythonParser (lvl+1)) 
+        <*> (else' *> colon' *> newline' *> (pythonParser (lvl+1)))
+    <|> While <$> (bexp <* colon' <* newline') <*> (pure Skip <|> pythonParser (lvl+1))
+    <|> Assign <$> ((ensureWS' lvl) *> var <* singleEqual') <*> (aexp <* newline')
 
 -- data Stmt =
 --    Skip
@@ -403,23 +409,24 @@ pythonSyntax = Assign <$> ensureWS *> var <* singleEqual' <*> aexp
 --  | While BExp Stmt
 --  deriving (Show, Eq)
 
---   Assign <$> var <* singleEqual' <*> aexp
---     <|> Seq <$> cSyntax <* semicolon' <*> cSyntax
---     <|> If <$> iff' *> lparen *> bexp <*> rparen *> lbrac *> 
---         (pure Skip <|> cSyntax) <* rbrac *> else' *> lbrac *> (pure Skip <|> cSyntax) <* rbrac
---     -- <|> While <$> while' *> lparen *> bexp <* rparen <*> lbrac *> (pure Skip <|> cSyntax) <* rbrac
 
-
--- parse newlines, while, else, if, single equals, :
 colon' :: Parser Char
 colon' = char ':'
 
+newline' :: Parser String
+newline' = str "\n"
+
 -- check that exactly correct amount of whitespace comes before the first character,
 -- using helper function to accumulate requisite whitespace
-ensureWS :: Integer -> Parser String
-ensureWS level = str (theWS level) <* ensure lookahead isAlphaNum 
+ensureWS' :: Integer -> Parser String
+ensureWS' level = loop (theWS level) <* (ensure isAlphaNumWrap lookahead)
     where theWS 0 = ""
-          theWS l = "  " + theWS (l-1)  
+          theWS l = "  " ++ theWS (l-1)  
+          isAlphaNumWrap Nothing = False
+          isAlphaNumWrap (Just c) = isAlphaNum c
+          loop s
+          loop [] = pure []
+          loop (c:cs) = (:) <$> satisfy (==c) <*> loop cs
 
 -- when recurse, increment level by 2
 -- before every statement make sure there is levels*2 space

@@ -1,13 +1,10 @@
 -- Homework 4.0: Parsing with Applicative
--- Due 2016-10-10
+-- Charlie Watson, Christina Tong
+-- Prof Greenberg
 
 {-# OPTIONS_GHC -Wall -fno-warn-unused-imports #-}
 
 module Hw04 where
-
--- Charlie Watson, Christina Tong
--- Hw 4
--- Prof Greenberg
 
 import Control.Applicative
 import Data.Char
@@ -211,7 +208,6 @@ isKeyword = (`elem` keywords)
 -- **HWHWHW** Write the that parses a keyword (you don't need to check
 -- that the given string is in the list `keywords`).
 
-
 kw :: String -> Parser String
 kw s = ws *> ((str s) <* (ensure isNotAlphaNumeric lookahead))
    where isNotAlphaNumeric Nothing = True
@@ -248,6 +244,8 @@ factor = Times <$> neg <* times <*> factor <|> neg
 neg = Neg <$> (minus *> atom) <|> atom
 atom = Num <$> num <|> (char '(' *> aexp <* char ')') <|> Var <$> var
 
+-- small helper parsers
+
 plus, divide, minus, times :: Parser Char
 plus = char '+'
 divide = char '/'
@@ -283,6 +281,8 @@ atomB = Bool <$> bool' <|> (char '(' *> bexp <* char ')')
       <|> (\x y -> (And (Not (Equal x y)) (Not (Lt x y)))) <$> aexp <* gt' <*> aexp
       <|> Not <$> (Lt <$> aexp <* geq' <*> aexp)
       <|> (\x y -> (Or (Equal x y) (Lt x y))) <$> aexp <* leq' <*> aexp
+
+-- small helper parsers
 
 or', and', bang', equal', nequal', lt', gt', leq', geq' :: Parser String
 or' = str "||"
@@ -323,15 +323,16 @@ cProg5 = "if (x==0) { y = 10;} else { }\ny = x + y;\n;x = 5;"
 -- explicitly encourage collaboration on understanding the syntax (though
 -- please write your own parsers within your pair).
 
-
 cSyntax :: Parser Stmt
 cSyntax = (Seq <$> cHelper <*> cSyntax) <|> cHelper
 
 cHelper :: Parser Stmt
 cHelper = If <$> (((iff' *> lparen) *> bexp) <* rparen) <*> (lbrac *>
-        (pure Skip <|> cSyntax) <* rbrac) <*> (else' *> lbrac *> (pure Skip <|> cSyntax) <* rbrac)
-    <|> While <$> (((while' *> lparen) *> bexp) <* rparen) <*> (((lbrac *> (pure Skip <|> cSyntax)) <* rbrac) <* semicolon') 
+        (cSyntax <|> pure Skip) <* rbrac) <*> (else' *> lbrac *> (cSyntax <|> pure Skip) <* rbrac)
+    <|> While <$> (((while' *> lparen) *> bexp) <* rparen) <*> (((lbrac *> (cSyntax <|> pure Skip)) <* rbrac) <* semicolon') 
     <|> Assign <$> (var <* singleEqual') <*> (aexp <* semicolon')
+
+-- small helper parsers
 
 semicolon', singleEqual', while', iff', else', lparen, rparen, lbrac, rbrac :: Parser String
 lparen = str "("
@@ -403,40 +404,48 @@ pythonParserSeq :: Integer -> Parser Stmt
 pythonParserSeq lvl = Seq <$> (pythonParser lvl) <*> (pythonParserSeq lvl)
     <|> (pythonParser lvl)
     
-
 pythonParser :: Integer -> Parser Stmt
-pythonParser lvl = If <$> (bexp <* colon' <* newline') <*> (pure Skip <|> pythonParserSeq (lvl+1)) 
+pythonParser lvl = If <$> (iff' *> bexp <* colon' <* newline') <*> (pythonParserSeq (lvl+1) <|> (pure Skip <* newline')) 
         <*> (else' *> colon' *> newline' *> (pythonParserSeq (lvl+1)))
-    <|> While <$> (bexp <* colon' <* newline') <*> (pure Skip <|> pythonParserSeq (lvl+1))
-    <|> Assign <$> ((ensureWS' lvl) *> var <* singleEqual') <*> (aexp <* newline')
+    <|> While <$> (while' *> bexp <* colon' <* newline') <*> (pythonParserSeq (lvl+1) <|> (pure Skip <* newline'))
+    <|> Assign <$> ((ensureWS' lvl) *> var' <* singleEqual'') <*> (aexp <* newline')
+    <|> pure Skip <* newline'
 
-colon' :: Parser Char
-colon' = char ':'
+-- functions for parsing specific strings and characters,
+-- that do not eat up all surrounding whitespace 
+
+colon' :: Parser String
+colon' = str' ":"
 
 isSpace' :: Char -> Bool
 isSpace' c = c == ' ' 
+
 ws' :: Parser ()
 ws' = pure () <* many (satisfy isSpace')
 
 newline' :: Parser ()
 newline' = ws' <* satisfy (\x -> if x == '\n' then True else False)
 
+str' :: String -> Parser String
+str' s = ws' *> loop s
+ where loop [] = pure []
+       loop (c:cs) = (:) <$> satisfy (==c) <*> loop cs
+
+singleEqual'' :: Parser String
+singleEqual'' = str' "="
+
+var' :: Parser String
+var' = ws' *> (ensure (\s -> not (isKeyword s)) ((:) <$> satisfy isAlpha <*> many (satisfy isAlphaNum)))
 
 -- check that exactly correct amount of whitespace comes before the first character,
 -- using helper function to accumulate requisite whitespace
+
 ensureWS' :: Integer -> Parser String
 ensureWS' level = ensure (\s -> s == (xWS level)) (many (satisfy isSpace)) <* (ensure isAlphaNumWrap lookahead)
     where xWS 0 = ""
           xWS l = "  " ++ xWS (l-1) 
           isAlphaNumWrap Nothing = False
           isAlphaNumWrap (Just c) = isAlphaNum c
-
-
--- when recurse, increment level by 2
--- before every statement make sure there is levels*2 space
--- catch 
--- skip is empty space?
-
 
 
 -- You can largely follow the same idea as your C-style parser, but your

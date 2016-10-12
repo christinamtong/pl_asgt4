@@ -323,13 +323,14 @@ cProg5 = "if (x==0) { y = 10;} else { }\ny = x + y;\n;x = 5;"
 -- explicitly encourage collaboration on understanding the syntax (though
 -- please write your own parsers within your pair).
 
+
 cSyntax :: Parser Stmt
-cSyntax = Seq <$> cHelper <* semicolon' <*> cSyntax
+cSyntax = (Seq <$> cHelper <*> cSyntax) <|> cHelper
 
 cHelper :: Parser Stmt
-cHelper = If <$> (iff' *> lparen *> bexp <* rparen) <*> (lbrac *>
+cHelper = If <$> (((iff' *> lparen) *> bexp) <* rparen) <*> (lbrac *>
         (pure Skip <|> cSyntax) <* rbrac) <*> (else' *> lbrac *> (pure Skip <|> cSyntax) <* rbrac)
-    <|> While <$> (while' *> lparen *> bexp <* rparen) <*> (lbrac *> (pure Skip <|> cSyntax) <* rbrac)
+    <|> While <$> (((while' *> lparen) *> bexp) <* rparen) <*> (((lbrac *> (pure Skip <|> cSyntax)) <* rbrac) <* semicolon') 
     <|> Assign <$> (var <* singleEqual') <*> (aexp <* semicolon')
 
 semicolon', singleEqual', while', iff', else', lparen, rparen, lbrac, rbrac :: Parser String
@@ -399,7 +400,9 @@ pythonSyntax :: Parser Stmt
 pythonSyntax = pythonParserSeq 0
 
 pythonParserSeq :: Integer -> Parser Stmt
-pythonParserSeq lvl = Seq <$> ((pythonParser lvl) <* newline') <*> (pythonParserSeq lvl)
+pythonParserSeq lvl = Seq <$> (pythonParser lvl) <*> (pythonParserSeq lvl)
+    <|> (pythonParser lvl)
+    
 
 pythonParser :: Integer -> Parser Stmt
 pythonParser lvl = If <$> (bexp <* colon' <* newline') <*> (pure Skip <|> pythonParserSeq (lvl+1)) 
@@ -407,20 +410,17 @@ pythonParser lvl = If <$> (bexp <* colon' <* newline') <*> (pure Skip <|> python
     <|> While <$> (bexp <* colon' <* newline') <*> (pure Skip <|> pythonParserSeq (lvl+1))
     <|> Assign <$> ((ensureWS' lvl) *> var <* singleEqual') <*> (aexp <* newline')
 
--- data Stmt =
---    Skip
---  | Assign VarName AExp
---  | Seq Stmt Stmt
---  | If BExp Stmt Stmt
---  | While BExp Stmt
---  deriving (Show, Eq)
-
-
 colon' :: Parser Char
 colon' = char ':'
 
-newline' :: Parser String
-newline' = str "\n"
+isSpace' :: Char -> Bool
+isSpace' c = c == ' ' 
+ws' :: Parser ()
+ws' = pure () <* many (satisfy isSpace')
+
+newline' :: Parser ()
+newline' = ws' <* satisfy (\x -> if x == '\n' then True else False)
+
 
 -- check that exactly correct amount of whitespace comes before the first character,
 -- using helper function to accumulate requisite whitespace
